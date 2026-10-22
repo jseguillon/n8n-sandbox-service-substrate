@@ -1,32 +1,14 @@
 # Documentation
 
-## Getting started
+## Agent Substrate
 
-| Platform | Use case | Guide |
-| --- | --- | --- |
-| Linux | Production, Docker runner with Sysbox isolation | [quickstart-linux.md](quickstart-linux.md) |
-| Linux + KVM | Production, Firecracker runner | [quickstart-firecracker-linux.md](quickstart-firecracker-linux.md) |
-| Kubernetes | Production cluster deployment (Helm) | [quickstart-k8s.md](quickstart-k8s.md) · [chart README](../charts/n8n-sandbox-service/README.md) |
-| macOS | Local development, privileged containers | [quickstart-macos.md](quickstart-macos.md) |
+- [Deployment package](../substrate/README.md) — actor image, WorkerPool, and ActorTemplate
+- [Native Substrate API](substrate.md) — Actor lifecycle, router requests, and security requirements
+- [Private registry trust](substrate-registry-trust.md) — Harbor CA trust for atelet image pulls
+- [Agent Substrate documentation](https://github.com/agent-substrate/substrate) — cluster installation, identity, egress policy, snapshots, and operations
 
-## Reference
+## Legacy implementation
 
-- [Architecture](architecture.md) — components, communication, data flows, storage
-- [Security model](security-model.md) — trust boundaries, what is enforced where, non-guarantees
-- [Configuration](configuration.md) — every environment variable for API, runner and daemon; metrics; disk quotas
-- [REST API](API.md) — endpoint reference and error contract
-- [TypeScript SDK](../sdk/README.md) — client library
-- Runtime internals: [Docker/Sysbox](../internal/runner/runtime/docker/README.md) · [Firecracker](../internal/runner/runtime/firecracker.ee/README.md)
-
-## Operations
-
-- [Observability](observability.md) — trace ids, canonical log events, how to query them
-- [mTLS on Kubernetes with cert-manager](cert-manager-k8s.md) — certificate roles and the env vars they map to
-- [Debugging gRPC with grpcurl](grpcurl-debug.md)
-
-## Development and release
-
-- [Development guide](development.md) — building, running locally, tests, playground, SDK, formatting
-- [Release process](RELEASE.md) — service and SDK release pipelines
-- [Firecracker golden-build bundle](../BUNDLE.md) — tarball contract and rollout order for Firecracker hosts
-- [End-to-end tests](../e2e/README.md) · [Benchmarks](../benchmarks/README.md)
+The self-hosted API, runners, Helm chart, SDK, and their documentation remain in
+the repository for migration reference. They are not deployed by the
+Substrate-native package.

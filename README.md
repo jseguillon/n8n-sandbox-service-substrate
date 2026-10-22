@@ -1,19 +1,20 @@
 # n8n Sandbox Service
 
-Isolated, on-demand execution environments behind a REST API. Each sandbox is a container (Docker/Sysbox runner) or a Firecracker microVM, with a small HTTP daemon inside that runs commands and handles files. Runners register with a central API, which places sandboxes and proxies requests to them.
+Isolated, stateful execution environments on [Agent Substrate](https://github.com/agent-substrate/substrate).
+Each sandbox is a Substrate Actor in a gVisor sandbox. Agent Substrate owns
+placement, isolation, snapshots, resume, and routing; an operator-owned
+controller decides when to suspend idle actors. This repository supplies the
+unprivileged sandbox actor image and its deployment definitions.
 
 ## Get started
 
-| I want to… | Read |
-| --- | --- |
-| Run it on a Linux host with Sysbox | [docs/quickstart-linux.md](docs/quickstart-linux.md) |
-| Run the Firecracker runner on a KVM host | [docs/quickstart-firecracker-linux.md](docs/quickstart-firecracker-linux.md) |
-| Develop on macOS | [docs/quickstart-macos.md](docs/quickstart-macos.md) |
-| Deploy to Kubernetes | [docs/quickstart-k8s.md](docs/quickstart-k8s.md) |
-| Call the API | [docs/API.md](docs/API.md) · [TypeScript SDK](sdk/README.md) |
-| Build and test | [docs/development.md](docs/development.md) |
+1. Install Agent Substrate on Kubernetes using its upstream quickstart.
+2. Build the actor image from `Dockerfile.substrate-sandbox` and publish it by digest.
+3. Deploy the [Substrate worker pool and actor template](substrate/README.md).
+4. Create and route to Actors using the [native Substrate API](docs/substrate.md).
 
-The full index, including architecture, security model, configuration, operations and release process, is in [docs/README.md](docs/README.md).
+The retired self-hosted API, runner, and SDK are retained in the repository only
+as migration reference and are not part of the Substrate deployment.
 
 ## License
 
