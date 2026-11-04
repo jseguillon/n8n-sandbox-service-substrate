@@ -44,6 +44,29 @@ docker buildx build --platform linux/amd64 \
   -t registry.example/n8n-sandbox:2026-10-19 .
 ```
 
+### GitHub Container Registry
+
+The **Build Substrate Sandbox** GitHub Actions workflow builds and smoke-tests
+`Dockerfile.substrate-sandbox` for `linux/amd64`, then publishes to
+`ghcr.io/<repository-owner>/<repository-name>`. It runs on relevant pushes to
+`feat/substrate-sandbox-build` and `main`, or manually with `workflow_dispatch`
+once the workflow exists on the default branch. It uses `GITHUB_TOKEN` with
+`packages: write`; no registry secret is required.
+The inherited n8n image publishing, retagging, and pruning jobs only run in
+`n8n-io/n8n-sandbox-service`, so they are skipped in this fork.
+
+For `jseguillon/n8n-sandbox-service-substrate`, pull the branch image with:
+
+```bash
+docker pull ghcr.io/jseguillon/n8n-sandbox-service-substrate:branch-feat-substrate-sandbox-build
+```
+
+Each build also publishes `sha-<full-commit-sha>`. Copy the digest-pinned
+`export SUBSTRATE_SANDBOX_IMAGE=...` command from the workflow's job summary
+for deployment. New GHCR packages are private by default; set the package's
+visibility to public for anonymous pulls, or configure the Substrate worker's
+registry credentials for private pulls.
+
 ## Deploy
 
 `ActorTemplate` is managed through the Substrate API; it is not a Kubernetes

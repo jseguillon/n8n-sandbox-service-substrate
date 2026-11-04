@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   publish-images:
-    if: github.event.pull_request.merged == true
+    if: github.repository == 'n8n-io/n8n-sandbox-service' && github.event.pull_request.merged == true
     runs-on: ${{ vars.RUNNER_PROVIDER == 'github' && 'ubuntu-latest' || 'blacksmith-4vcpu-ubuntu-2204' }}
     environment: docker-release
     outputs:

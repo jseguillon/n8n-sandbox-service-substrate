@@ -1,0 +1,13 @@
+# Only send the daemon sources and runtime workspace to the image builder.
+**
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!proto/
+!proto/**
+!sandbox-workspace/
+!sandbox-workspace/**
+sandbox-workspace/node_modules

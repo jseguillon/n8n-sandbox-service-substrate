@@ -34,6 +34,7 @@ concurrency:
 
 jobs:
   retag:
+    if: github.repository == 'n8n-io/n8n-sandbox-service'
     runs-on: ubuntu-latest
     environment: docker-release
     steps:
