@@ -1,0 +1,108 @@
+name: Build Substrate Sandbox
+
+on:
+  push:
+    branches: [feat/substrate-sandbox-build, main]
+    paths:
+      - .github/workflows/build-substrate-sandbox.yml
+      - Dockerfile.substrate-sandbox
+      - Dockerfile.substrate-sandbox.dockerignore
+      - go.mod
+      - go.sum
+      - cmd/**
+      - internal/**
+      - proto/**
+      - sandbox-workspace/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: substrate-sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+            type=ref,event=branch,prefix=branch-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile.substrate-sandbox
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=substrate-sandbox-amd64
+          cache-to: type=gha,mode=max,scope=substrate-sandbox-amd64
+
+      - name: Smoke test image
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+        run: |
+          docker run --rm "$IMAGE" /usr/local/bin/sandbox-daemon --help
+          docker run --rm "$IMAGE" sh -ec '
+            test "$(id -u)" = 1000
+            node --version
+            tsc --version
+            venv/bin/python --version
+            test -d workspace/node_modules
+          '
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish image
+        id: publish
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile.substrate-sandbox
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=substrate-sandbox-amd64
+
+      - name: Deployment reference
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            echo '## Substrate sandbox image (linux/amd64)'
+            echo
+            echo "\`export SUBSTRATE_SANDBOX_IMAGE=${IMAGE}@${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
