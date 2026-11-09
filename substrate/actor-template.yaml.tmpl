@@ -10,20 +10,25 @@ containers:
 - name: sandbox
   # The control plane rejects images without a digest.
   image: ${SUBSTRATE_SANDBOX_IMAGE}
+  command:
+  - /usr/local/bin/sandbox-daemon
+  args:
+  - --listen-addr
+  - :80
   wakeupProbe:
     httpGet:
       path: /healthz
-      port: 8081
+      port: 80
     timeoutSeconds: 30
   securityContext:
     capabilities:
       drop:
       - ALL
+      add:
+      - NET_BIND_SERVICE
 resources:
   limits:
-  - name: cpu
-    quantity: "1"
-  - name: memory
-    quantity: 2Gi
+    cpuMillicores: 1000
+    memoryBytes: 2147483648
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
