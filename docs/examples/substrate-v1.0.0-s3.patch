@@ -1,0 +1,68 @@
+diff --git a/manifests/ate-install/ate-api-server.yaml b/manifests/ate-install/ate-api-server.yaml
+--- a/manifests/ate-install/ate-api-server.yaml
++++ b/manifests/ate-install/ate-api-server.yaml
+@@ -142,5 +142,30 @@
+         - name: ATE_STORAGE_BACKEND
+-          value: "gcs"
++          value: "s3"
++        - name: AWS_REGION
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_REGION
++        - name: AWS_ENDPOINT_URL
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_ENDPOINT_URL
++        - name: AWS_S3_USE_PATH_STYLE
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_S3_USE_PATH_STYLE
++        - name: AWS_ACCESS_KEY_ID
++          valueFrom:
++            secretKeyRef:
++              name: substrate-s3-credentials
++              key: AWS_ACCESS_KEY_ID
++        - name: AWS_SECRET_ACCESS_KEY
++          valueFrom:
++            secretKeyRef:
++              name: substrate-s3-credentials
++              key: AWS_SECRET_ACCESS_KEY
+         - name: ATE_API_ACTOR_JWT_ISSUER
+           valueFrom:
+             configMapKeyRef:
+diff --git a/manifests/ate-install/atelet.yaml b/manifests/ate-install/atelet.yaml
+--- a/manifests/ate-install/atelet.yaml
++++ b/manifests/ate-install/atelet.yaml
+@@ -224,3 +224,28 @@
+         - name: ATE_STORAGE_BACKEND
+-          value: "gcs"
++          value: "s3"
++        - name: AWS_REGION
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_REGION
++        - name: AWS_ENDPOINT_URL
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_ENDPOINT_URL
++        - name: AWS_S3_USE_PATH_STYLE
++          valueFrom:
++            configMapKeyRef:
++              name: substrate-s3-config
++              key: AWS_S3_USE_PATH_STYLE
++        - name: AWS_ACCESS_KEY_ID
++          valueFrom:
++            secretKeyRef:
++              name: substrate-s3-credentials
++              key: AWS_ACCESS_KEY_ID
++        - name: AWS_SECRET_ACCESS_KEY
++          valueFrom:
++            secretKeyRef:
++              name: substrate-s3-credentials
++              key: AWS_SECRET_ACCESS_KEY
+         # On GCS each transfer runs on a token scoped to its actor, from the

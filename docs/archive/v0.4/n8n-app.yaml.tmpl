@@ -1,0 +1,118 @@
+# Archived Substrate v0.4 compatibility-test manifest.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n-app
+  labels:
+    ate.dev/api-access: "true"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n
+  namespace: n8n-app
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-data
+  namespace: n8n-app
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: n8n-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      serviceAccountName: n8n
+      automountServiceAccountToken: false
+      containers:
+      - name: n8n
+        image: ${N8N_IMAGE}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 5678
+        env:
+        - name: N8N_HOST
+          value: localhost
+        - name: N8N_PROTOCOL
+          value: http
+        - name: N8N_PORT
+          value: "5678"
+        - name: N8N_LISTEN_ADDRESS
+          value: 0.0.0.0
+        - name: N8N_INSTANCE_AI_SANDBOX_ENABLED
+          value: "true"
+        - name: SUBSTRATE_TOKEN_FILE
+          value: /run/substrate/token
+        - name: SUBSTRATE_CA_FILE
+          value: /run/substrate/ca.crt
+        - name: SUBSTRATE_SERVER_NAME
+          value: api.ate-system.svc
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        volumeMounts:
+        - name: n8n-data
+          mountPath: /home/node/.n8n
+        - name: substrate-auth
+          mountPath: /run/substrate
+          readOnly: true
+      volumes:
+      - name: n8n-data
+        persistentVolumeClaim:
+          claimName: n8n-data
+      - name: substrate-auth
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: api.ate-system.svc
+              expirationSeconds: 3600
+              path: token
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: n8n-app
+spec:
+  selector:
+    app: n8n
+  ports:
+  - name: http
+    port: 5678
+    targetPort: http

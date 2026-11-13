@@ -1,9 +1,9 @@
-# Legacy Self-Hosted Architecture
+# Architecture
 
-The active deployment uses [Agent Substrate](https://github.com/agent-substrate/substrate).
-See [the Substrate deployment package](../substrate/README.md) and the
-[native API](substrate.md). This document describes the retired self-hosted
-control plane retained only for migration reference.
+This document describes the sandbox-service gateway and runners. For the
+additional Agent Substrate deployment option, see
+[the Substrate deployment package](../substrate/README.md) and its
+[native API guide](substrate.md).
 
 The n8n Sandbox Service provides isolated, on-demand execution environments via a REST API. Each sandbox is a Debian-based container (Docker/Sysbox runner) or microVM (Firecracker runner) with an HTTP daemon inside that handles command execution and file operations. The service is designed for horizontal scalability: runners register dynamically with a central API gateway, which routes client requests to the appropriate runner and sandbox.
 

@@ -1,16 +1,9 @@
-# Retired Sandbox Service API
+# Sandbox Service API
 
-This REST gateway is not part of the Substrate-native deployment. Use the
-[native Substrate API](substrate.md) for Actor lifecycle and route daemon
-requests through `atenet-router`. The material below documents the retired
-self-hosted implementation only.
-
-The custom n8n integration accepts `substrate` in its sandbox provider enum.
-Its verification request uses `{"provider":"substrate"}`. Its admin settings
-update uses `{"sandboxProvider":"substrate","sandboxEnabled":true}`.
-These are n8n API payloads, not routes on the retired service. The connection
-comes from server-side `SUBSTRATE_*` variables. See the
-[provider integration notes](substrate.md#n8n-provider-integration).
+This document describes the sandbox-service REST gateway. The additional
+Agent Substrate deployment option uses the
+[native Substrate API](substrate.md) for Actor lifecycle and routes daemon
+requests through `atenet-router` instead of this gateway.
 
 All endpoints except `/healthz` and `/metrics` require the `X-Api-Key` header for authentication. `/metrics` is only exposed when `SANDBOX_API_METRICS_ENABLED=true` and is intended to be scraped over a private network; `SANDBOX_API_METRICS_LISTEN_ADDR` can move it to a port of its own, off the port that serves this API.
 

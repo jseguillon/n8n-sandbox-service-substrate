@@ -1,0 +1,41 @@
+# Archived ActorTemplate for the Substrate v0.4 control API.
+metadata:
+  atespace: n8n-sandboxes
+  name: n8n-sandbox
+workerSelector:
+  matchLabels:
+    workload: n8n-sandbox
+containers:
+- name: sandbox
+  image: ${SUBSTRATE_SANDBOX_IMAGE}
+  # Substrate v0.4 unpacks the image as root. Normalize the device and home
+  # permissions before the daemon drops to the image's UID/GID 1000.
+  command:
+  - /bin/sh
+  - -c
+  - chmod 0755 / /dev && chmod 0666 /dev/null /dev/zero /dev/random /dev/urandom && chown -R 1000:1000 /home/user && exec /usr/local/bin/sandbox-daemon --listen-addr :80
+  wakeupProbe:
+    httpGet:
+      path: /healthz
+      port: 80
+    timeoutSeconds: 30
+  securityContext:
+    capabilities:
+      drop:
+      - ALL
+      add:
+      - CHOWN
+      - SETUID
+      - SETGID
+resources:
+  limits:
+  - name: cpu
+    quantity: "1"
+  - name: memory
+    quantity: 2Gi
+snapshotConfig:
+  onCommit: SNAPSHOT_CONTENT_SCOPE_FULL
+  storageLocation: s3://ate-snapshots/n8n-sandboxes/
+sandboxConfig:
+  sandboxClass: SANDBOX_CLASS_GVISOR
+  configName: gvisor-default

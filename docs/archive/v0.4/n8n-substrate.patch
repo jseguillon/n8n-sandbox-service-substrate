@@ -1,0 +1,123 @@
+diff --git a/packages/@n8n/agents/src/workspace/sandbox/substrate-control.ts b/packages/@n8n/agents/src/workspace/sandbox/substrate-control.ts
+index 97535060f4..d44849297f 100644
+--- a/packages/@n8n/agents/src/workspace/sandbox/substrate-control.ts
++++ b/packages/@n8n/agents/src/workspace/sandbox/substrate-control.ts
+@@ -56 +56 @@ export class SubstrateControl {
+-		const [{ Client, credentials, Metadata }, { parse }] = await Promise.all([
++		const [{ Client, credentials, Metadata }, protobufjs] = await Promise.all([
+@@ -60 +60,3 @@ export class SubstrateControl {
+-		const schema = (protocol ??= parse(PROTOCOL).root);
++		// Handle protobufjs as the ESM default and the CommonJS namespace.
++		const protobuf = protobufjs.default ?? protobufjs;
++		const schema = (protocol ??= protobuf.parse(PROTOCOL).root);
+diff --git a/packages/@n8n/agents/src/workspace/sandbox/types.ts b/packages/@n8n/agents/src/workspace/sandbox/types.ts
+index e63a3473c7..e4dc4618a5 100644
+--- a/packages/@n8n/agents/src/workspace/sandbox/types.ts
++++ b/packages/@n8n/agents/src/workspace/sandbox/types.ts
+@@ -2 +2,5 @@ import type { CreateSandboxFromImageParams } from '@daytona/sdk';
+-import type { SandboxClient } from '@n8n/sandbox-client';
++import type {
++	FileEntry as SandboxClientFileEntry,
++	ListFilesOptions,
++	SandboxClient,
++} from '@n8n/sandbox-client';
+@@ -57,12 +61,20 @@ export type SandboxProvider = 'daytona' | 'n8n-sandbox' | 'substrate';
+-export type SandboxFileClient = Pick<
+-	SandboxClient,
+-	| 'readFile'
+-	| 'writeFile'
+-	| 'appendFile'
+-	| 'deleteFile'
+-	| 'copyFile'
+-	| 'moveFile'
+-	| 'mkdir'
+-	| 'listFiles'
+-	| 'stat'
+->;
++export type SandboxFileClient = Omit<
++	Pick<
++		SandboxClient,
++		| 'readFile'
++		| 'writeFile'
++		| 'appendFile'
++		| 'deleteFile'
++		| 'copyFile'
++		| 'moveFile'
++		| 'mkdir'
++		| 'listFiles'
++		| 'stat'
++	>,
++	'listFiles'
++> & {
++	listFiles(
++		id: string,
++		options?: ListFilesOptions,
++	): Promise<Array<Pick<SandboxClientFileEntry, 'name' | 'size' | 'isDir'>>>;
++};
+diff --git a/packages/@n8n/agents/src/__tests__/substrate-protobufjs-interop.test.ts b/packages/@n8n/agents/src/__tests__/substrate-protobufjs-interop.test.ts
+new file mode 100644
+index 0000000000..82f994a164
+--- /dev/null
++++ b/packages/@n8n/agents/src/__tests__/substrate-protobufjs-interop.test.ts
+@@ -0,0 +1,61 @@
++import { expect, it, vi } from 'vitest';
++
++const { clientClose } = vi.hoisted(() => ({ clientClose: vi.fn() }));
++
++vi.mock('@grpc/grpc-js', () => {
++	class ClientMock {
++		constructor(_target: string, _credentials: unknown, _options: unknown) {}
++
++		makeUnaryRequest(
++			_path: string,
++			_serialize: (value: object) => Buffer,
++			_deserialize: (value: Buffer) => unknown,
++			_request: object,
++			_metadata: unknown,
++			_options: { deadline: number },
++			done: (error: Error | null, value?: unknown) => void,
++		) {
++			done(null);
++		}
++
++		close() {
++			clientClose();
++		}
++	}
++
++	class MetadataMock {
++		set(_key: string, _value: string) {}
++	}
++
++	return {
++		Client: ClientMock,
++		Metadata: MetadataMock,
++		credentials: { createSsl: () => ({}) },
++	};
++});
++
++vi.mock('protobufjs', async () => {
++	const actual = await vi.importActual<typeof import('protobufjs')>('protobufjs');
++	return { default: { parse: actual.parse } };
++});
++
++import { SubstrateControl } from '../workspace/sandbox/substrate-control';
++
++it('loads protobufjs from its CommonJS default export', async () => {
++	const control = new SubstrateControl(
++		{
++			endpoint: 'control.example.test:443',
++			routerUrl: 'https://router.example.test',
++			atespace: 'test-space',
++			template: 'test-template',
++			token: 'fixture-token',
++			tokenFile: '',
++			caFile: '',
++			serverName: 'api.ate-system.svc',
++		},
++		1_000,
++	);
++
++	await expect(control.call('DeleteActor', 'test-actor')).resolves.toBeUndefined();
++	expect(clientClose).toHaveBeenCalledOnce();
++});

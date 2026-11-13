@@ -1,8 +1,9 @@
 # Agent Substrate deployment
 
-This directory contains the Agent Substrate deployment assets for the sandbox. It replaces
-the API gateway, runner registry, Docker-in-Docker, Firecracker runner, and
-tenant database with [Agent Substrate](https://github.com/agent-substrate/substrate).
+This directory contains the Substrate v1 WorkerPool and ActorTemplate for the
+n8n sandbox daemon. Agent Substrate owns placement, isolation, snapshots, resume,
+and routing. This is an additional deployment option alongside the
+sandbox-service gateway and runners.
 
 Each n8n sandbox is a Substrate Actor. Substrate places it into a gVisor worker,
 restores the memory and filesystem state that a controller snapshots, and routes
@@ -10,24 +11,25 @@ a request to it through `atenet-router`.
 
 ## Prerequisites
 
-Install Agent Substrate and `kubectl ate` using its upstream quickstart. The
-cluster must have a snapshot store configured. This package assumes the
-installed Substrate release provides a gVisor `SandboxConfig` default.
+Install Substrate v1 and `kubectl ate` by following the
+[upstream installation guide](https://github.com/agent-substrate/substrate).
+Configure a gVisor `SandboxConfig`, snapshot storage, and trusted Control API
+authentication. Create a separate Atespace and access policy for each tenant.
+Do not use a shared bootstrap owner as the tenant authorization model.
 
-Before applying these resources, replace Substrate's bootstrap control-plane
-identity with your trusted JWT or mTLS configuration and grant each tenant only
-its own Atespace. Do not run this multi-tenant package with a shared bootstrap
-owner. Also operate a trusted controller that synchronously suspends Actors on
-idleness and before worker or node eviction; Substrate does not do either
-automatically.
+The WorkerPool namespace uses Pod Security Admission level `privileged` because
+Substrate workers need hostPath access. Keep application workloads in a separate
+namespace. n8n's Substrate integration records Actor activity and runs a
+leader-coordinated cleanup task. Use a separate trusted controller for Actors
+that n8n does not manage and for worker drains.
 
-The snapshot store must encrypt data at rest, restrict access to the Substrate
-control plane and node supervisors, and apply tenant-aware retention and
-deletion controls. Actors must not receive snapshot-store credentials.
+Encrypt snapshot data at rest. Restrict snapshot-store access to Substrate
+components. Apply tenant-aware retention and deletion controls. Do not give
+snapshot-store credentials to Actors.
 
-Set both values to immutable, digest-pinned images. `SUBSTRATE_WORKER_IMAGE` is
-the `ateworker-gvisor` image from the same Substrate release as the control
-plane. `SUBSTRATE_SANDBOX_IMAGE` is built from `Dockerfile.substrate-sandbox`.
+Set both values to immutable, digest-pinned images. Use the `ateworker-gvisor`
+image from the same Substrate release as the control plane. Build the sandbox
+image from `Dockerfile.substrate-sandbox`.
 
 ```bash
 export SUBSTRATE_WORKER_IMAGE=registry.example/ateworker-gvisor@sha256:...
@@ -53,6 +55,10 @@ kubectl ate create atespace n8n-sandboxes
 envsubst < substrate/actor-template.yaml.tmpl | kubectl ate create actor-template -f -
 ```
 
+Grant the n8n ServiceAccount only the role it needs in this Atespace. The
+sample n8n manifest and projected token and PodIdentity files are in
+[`docs/examples/`](../docs/README.md).
+
 Wait for the template's golden snapshot before accepting traffic:
 
 ```bash
@@ -61,8 +67,8 @@ kubectl ate get actor-template n8n-sandbox -a n8n-sandboxes
 
 ## Lifecycle
 
-An actor name is the sandbox identifier. It must be a DNS-1123 label, not the
-UUID format used by the retired service API.
+An actor name is the sandbox identifier. It must be a DNS-1123 label. The
+sandbox-service REST API uses UUID identifiers instead.
 
 ```bash
 kubectl ate create actor workflow-42 -a n8n-sandboxes --template n8n-sandbox
@@ -71,10 +77,16 @@ kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=sync
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
 ```
 
-Substrate does not suspend actors based on idleness. Operate a trusted idle
-controller that calls `suspend actor --mode=sync`, and arrange worker-drain
-handling before a node is terminated. Synchronous suspension does not return
-until the snapshot is durable.
+When automatic suspension is enabled, n8n starts a five-second grace period
+after an Actor's final command or file operation completes. A new operation
+cancels the pending suspension. n8n suspends persistent Actors synchronously and
+deletes ephemeral Actors. An hourly recovery task handles missed cleanup and
+applies the configured retention interval. See the
+[lifecycle guide](../docs/substrate.md#actor-lifecycle) for configuration details.
+
+For other Actors, operate a trusted idle controller that calls
+`suspend actor --mode=sync`. Arrange worker-drain handling before a node is
+terminated. Synchronous suspension does not return until the snapshot is durable.
 
 Deleting an Actor deletes its actor-owned snapshots. To retain state beyond an
 Actor's deletion, create a tag from a synchronously suspended Actor first:
@@ -85,32 +97,19 @@ kubectl ate create tag workflow-42-checkpoint -a n8n-sandboxes \
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
 ```
 
-## Requests
+## Router access
 
-Send requests to `atenet-router`, selecting the actor with the trusted
-`ate-target-actor` header. The sandbox daemon retains its direct endpoints, so
-the path no longer contains a sandbox id:
+The n8n client connects to `atenet-router` over HTTPS with a PodIdentity client
+certificate. The router checks that certificate's SPIFFE ID against its ingress
+allowlist. The `ate-target-actor` header selects an Actor; it does not authorize
+the caller. Keep the router private and allow only trusted server identities.
+See [the native API guide](../docs/substrate.md) for the request paths and
+security model.
 
-```bash
-kubectl -n ate-system port-forward svc/atenet-router 8000:80
-
-curl -X POST http://localhost:8000/executions \
-  -H 'ate-target-actor: n8n-sandboxes/workflow-42' \
-  -H 'Content-Type: application/json' \
-  --data '{"command":"echo hello"}'
-```
-
-The same header applies to `/files`, `/files/content`, `/stat`, and `/mkdir`.
-See [the native API guide](../docs/substrate.md) for endpoint and security
-details.
-
-Do not expose `atenet-router` directly to untrusted clients. Before serving
-traffic, deploy an authenticated policy-enforcement point that derives and
-overwrites `ate-target-actor` from trusted tenant identity. This package does
-not ship one because its authentication provider and tenant-to-Atespace mapping
-are deployment-specific. Forwarding a client-supplied value permits
-cross-actor access.
-
-Actors start with no egress policy. Substrate therefore denies DNS and outbound
-HTTP(S) until an operator creates an Actor egress policy. Keep this default;
-add only hostname-specific rules required by a tenant's workload.
+Substrate denies Actor DNS and outbound HTTP(S) unless an egress policy allows
+them. Configure n8n's `SUBSTRATE_EGRESS_POLICY_FILE` with administrator-defined
+default rules before a workspace needs package downloads. n8n copies these rules
+to Actors without an existing policy and leaves existing policies unchanged.
+With the setting unset, n8n creates no egress policy. See the
+[default egress guide](../docs/substrate.md#default-egress-policy) for the JSON
+format and update behavior.
