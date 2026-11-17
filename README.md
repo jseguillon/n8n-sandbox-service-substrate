@@ -6,6 +6,10 @@ The same daemon can also run in an [Agent Substrate](https://github.com/agent-su
 Actor. In this deployment option, Substrate manages placement, isolation,
 snapshots, resume, and routing.
 
+For Substrate, the ActorTemplate installs npm workspace dependencies through an
+idempotent startup command. Its readiness probe gates golden snapshot creation
+until initialization succeeds. The image retains Node.js and system tooling.
+
 ## Get started
 
 | I want to… | Read |

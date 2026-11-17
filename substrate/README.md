@@ -31,6 +31,10 @@ Set both values to immutable, digest-pinned images. Use the `ateworker-gvisor`
 image from the same Substrate release as the control plane. Build the sandbox
 image from `Dockerfile.substrate-sandbox`.
 
+The image supplies Node.js, Python, system tools, and the sandbox daemon. It does
+not install npm workspace dependencies or global TypeScript. The ActorTemplate
+owns the dependency manifest and initialization command.
+
 ```bash
 export SUBSTRATE_WORKER_IMAGE=registry.example/ateworker-gvisor@sha256:...
 export SUBSTRATE_SANDBOX_IMAGE=registry.example/n8n-sandbox@sha256:...
@@ -46,13 +50,20 @@ docker buildx build --platform linux/amd64 \
 
 ## Deploy
 
+Enable Substrate's `GoldenEgressPolicy` preview gate on both `ate-api-server` and
+`ate-controller` with `--preview=GoldenEgressPolicy`. The template's golden Actor
+needs registry TLS access while it installs dependencies. Keep that flag in the
+operator's deployment source. Use `kubectl ate --preview` when creating the
+template because its golden egress policy is a preview field.
+
 `ActorTemplate` is managed through the Substrate API; it is not a Kubernetes
 CRD. The worker pool is a Kubernetes resource.
 
 ```bash
 envsubst < substrate/worker-pool.yaml.tmpl | kubectl apply -f -
 kubectl ate create atespace n8n-sandboxes
-envsubst < substrate/actor-template.yaml.tmpl | kubectl ate create actor-template -f -
+envsubst '${SUBSTRATE_SANDBOX_IMAGE}' < substrate/actor-template.yaml.tmpl \
+  | kubectl ate --preview create actor-template -f -
 ```
 
 Grant the n8n ServiceAccount only the role it needs in this Atespace. The
@@ -64,6 +75,26 @@ Wait for the template's golden snapshot before accepting traffic:
 ```bash
 kubectl ate get actor-template n8n-sandbox -a n8n-sandboxes
 ```
+
+## Template bootstrap and readiness
+
+The template runs `/bin/sh -ec` through `command` and `args`. Its Node.js block
+writes the configured package manifest, runs npm with lifecycle scripts disabled,
+and validates the complete dependency tree. It writes `.n8n-runtime-ready`
+atomically only after validation succeeds. The marker contains the manifest hash.
+A repeated start with the same marker does not install packages or overwrite
+workspace files. This also supports cold boot from a ROOTFS snapshot.
+
+The command starts the daemon only after initialization succeeds. The v1
+`wakeupProbe` then gates readiness on `/healthz`, with a 180-second bootstrap
+budget. The template controller captures its golden snapshot after the Actor
+becomes ready. The golden snapshot therefore contains the installed dependencies.
+New Actors can use that snapshot without a separate seed tag or first-use install.
+
+Update the manifest pins in the template when n8n's runtime dependencies change.
+Create a new versioned ActorTemplate because templates are immutable. Preserve
+the old template while existing Actors still depend on it. `SUBSTRATE_ACTOR_TAG`
+is optional for manually prepared snapshots, but is not needed for this pattern.
 
 ## Lifecycle
 
@@ -84,6 +115,11 @@ atelet uploads the snapshot to object storage in the background. n8n deletes
 ephemeral Actors. An hourly recovery task handles missed cleanup and
 applies the configured retention interval. See the
 [lifecycle guide](../docs/substrate.md#actor-lifecycle) for configuration details.
+
+See the companion n8n `docs/substrate-startup-latency.md` for the MEMORY versus
+ROOTFS comparison. The template defaults to MEMORY. ROOTFS preserves filesystem
+changes but does not package process memory. VOLUMES alone does not preserve the
+unmounted workspace.
 
 For other Actors, operate a trusted idle controller that calls
 `suspend actor --mode=sync`. Arrange worker-drain handling before a node is

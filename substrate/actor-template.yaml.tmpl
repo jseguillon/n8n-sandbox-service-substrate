@@ -11,15 +11,37 @@ containers:
   # The control plane rejects images without a digest.
   image: ${SUBSTRATE_SANDBOX_IMAGE}
   command:
-  - /usr/local/bin/sandbox-daemon
+  - /bin/sh
   args:
-  - --listen-addr
-  - :80
+  - -ec
+  - |
+    cd /home/user/workspace
+    node -e '
+      const fs = require("node:fs");
+      const crypto = require("node:crypto");
+      const { execFileSync } = require("node:child_process");
+      const manifest = process.env.N8N_RUNTIME_PACKAGE_JSON;
+      const revision = crypto.createHash("sha256").update(manifest).digest("hex");
+      const marker = ".n8n-runtime-ready";
+      if (!fs.existsSync(marker) || fs.readFileSync(marker, "utf8").trim() !== revision) {
+        fs.writeFileSync("package.json", manifest);
+        execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-online"], { stdio: "inherit" });
+        execFileSync("npm", ["ls", "--all", "--silent"], { stdio: "ignore" });
+        fs.writeFileSync(marker + ".tmp", revision + "\n");
+        fs.renameSync(marker + ".tmp", marker);
+      }
+    '
+    exec /usr/local/bin/sandbox-daemon --listen-addr :80
+  env:
+  - name: N8N_RUNTIME_PACKAGE_JSON
+    value: '{"name":"sandbox-workspace","private":true,"dependencies":{"@n8n/workflow-sdk":"0.41.0","tsx":"4.19.3","typescript":"7.0.2"},"devDependencies":{"@types/node":"24.10.1"}}'
+  - name: PATH
+    value: /home/user/workspace/node_modules/.bin:/home/user/venv/bin:/home/user/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
   wakeupProbe:
     httpGet:
       path: /healthz
       port: 80
-    timeoutSeconds: 30
+    timeoutSeconds: 180
   securityContext:
     capabilities:
       drop:
@@ -32,3 +54,13 @@ resources:
     memoryBytes: 536870912
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+  goldenSnapshotConfig:
+    mode: GOLDEN_SNAPSHOT_MODE_ENABLED
+goldenEgressPolicy:
+  rules:
+  - tlsPassthrough:
+      hostnames:
+      - registry.npmjs.org
+      ports:
+        numbers:
+        - 443

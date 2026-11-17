@@ -119,6 +119,28 @@ Sysbox runner defaults. Worker limits bound shared physical capacity. A
 memory-fidelity suspend and resume preserves running process memory and the
 writable filesystem.
 
+Snapshot fidelity also affects startup. `ROOTFS` preserves writable filesystem
+changes without packaging process memory. `VOLUMES` preserves only configured
+volumes, so it does not keep this template's unmounted workspace. The n8n
+latency test found dependency installation to be the main first-use cost, not
+memory snapshotting. The companion n8n guide `docs/substrate-startup-latency.md`
+records the comparison.
+
+n8n can use `SUBSTRATE_ACTOR_TAG` to seed new Actors from an operator-prepared
+dependency snapshot. The tag must use the same Atespace and ActorTemplate.
+Prepare it from a new Actor with only shared runtime dependencies. Existing
+Actors keep their template identity and state. Workspace setup checks the local
+dependency tree before it installs packages. The companion n8n preparation
+script is `packages/cli/test/live/prepare-substrate-dependencies.cjs`.
+
+The current deployment template prepares those dependencies itself. The image
+contains Node.js and the daemon, with no npm workspace installation. Template
+`command` and `args` run an idempotent bootstrap. The daemon starts only after
+installation and dependency validation succeed. The `wakeupProbe` gates readiness
+and golden snapshot creation on that initialized daemon. See the
+[template bootstrap guide](../substrate/README.md#template-bootstrap-and-readiness).
+This pattern does not require a manually prepared seed tag.
+
 Configure a separate Atespace and authentication policy for each tenant. Do not
 treat Actor names or routing headers as authorization.
 
