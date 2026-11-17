@@ -38,17 +38,22 @@ boundary. Actor names must be DNS-1123 labels.
 kubectl ate create actor workflow-42 -a n8n-sandboxes --template n8n-sandbox
 kubectl ate resume actor workflow-42 -a n8n-sandboxes
 kubectl ate get actor workflow-42 -a n8n-sandboxes
-kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=sync
+kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=async
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
 ```
 
 n8n's Substrate integration records a separate lease for each command or file
-operation. When automatic suspension is enabled, the final operation's
-completion starts a grace period. The default is five seconds. A new operation
-cancels the pending suspension. Set
-`N8N_SUBSTRATE_SANDBOX_SUSPEND_DELAY_MS=0` for immediate suspension after the last
-operation. Persistent Actors use synchronous suspension; ephemeral Actors are
-deleted instead.
+operation. When automatic suspension is enabled, n8n requests asynchronous
+suspension as soon as the final operation finishes, fails, or times out.
+There is no pre-suspend timer. `N8N_SUBSTRATE_SANDBOX_SUSPEND_DELAY_MS` no longer
+applies. Ephemeral Actors are deleted instead.
+
+Asynchronous suspension (`--mode=async`, API mode `2`) returns after the node-local
+checkpoint. atelet uploads the snapshot to object storage in the background.
+Synchronous suspension (`--mode=sync`, API mode `1`) also waits for that upload
+to complete. Until then, the latest checkpoint depends on the node that holds it.
+n8n keeps its database claim until the asynchronous suspend RPC returns. It does
+not wait for the upload. New work uses the router to wake the Actor.
 
 A leader-coordinated recovery task runs once per hour. It handles missed cleanup
 using the configured auto-stop interval and deletes suspended Actors after their
@@ -61,6 +66,7 @@ Deleting an Actor removes its actor-owned snapshots. To retain a checkpoint
 after deletion, synchronously suspend the Actor, create a tag, then delete it:
 
 ```sh
+kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=sync
 kubectl ate create tag workflow-42-checkpoint -a n8n-sandboxes --actor workflow-42
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
 ```

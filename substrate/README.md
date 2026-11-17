@@ -73,14 +73,15 @@ sandbox-service REST API uses UUID identifiers instead.
 ```bash
 kubectl ate create actor workflow-42 -a n8n-sandboxes --template n8n-sandbox
 kubectl ate resume actor workflow-42 -a n8n-sandboxes
-kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=sync
+kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=async
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
 ```
 
-When automatic suspension is enabled, n8n starts a five-second grace period
-after an Actor's final command or file operation completes. A new operation
-cancels the pending suspension. n8n suspends persistent Actors synchronously and
-deletes ephemeral Actors. An hourly recovery task handles missed cleanup and
+When automatic suspension is enabled, n8n requests asynchronous suspension as
+soon as an Actor's final command or file operation finishes, fails, or times out.
+There is no pre-suspend timer. The RPC returns after the node-local checkpoint.
+atelet uploads the snapshot to object storage in the background. n8n deletes
+ephemeral Actors. An hourly recovery task handles missed cleanup and
 applies the configured retention interval. See the
 [lifecycle guide](../docs/substrate.md#actor-lifecycle) for configuration details.
 
@@ -92,6 +93,7 @@ Deleting an Actor deletes its actor-owned snapshots. To retain state beyond an
 Actor's deletion, create a tag from a synchronously suspended Actor first:
 
 ```bash
+kubectl ate suspend actor workflow-42 -a n8n-sandboxes --mode=sync
 kubectl ate create tag workflow-42-checkpoint -a n8n-sandboxes \
   --actor workflow-42
 kubectl ate delete actor workflow-42 -a n8n-sandboxes
